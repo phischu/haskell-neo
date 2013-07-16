@@ -14,5 +14,11 @@ library
   -- other-modules:       
   hs-source-dirs:      src
   build-depends:       base,
-                       haskell-rest
+                       haskell-rest,
+                       errors,
+                       aeson,
+                       mtl,
+                       transformers,
+                       text,
+                       bytestring
   default-language:    Haskell2010
