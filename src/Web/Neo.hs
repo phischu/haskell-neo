@@ -5,13 +5,14 @@ module Web.Neo (
 import Web.Rest (
     RestT,rest,
     runRestT,Hostname,Port,RestError,
-    Request(Request),Method(POST),ContentType,
+    Request(Request),Method(POST,PUT),Location,ContentType,Body,
     Response(code,responseType,responseBody),
     ResponseCode)
 
 import Control.Error (EitherT,runEitherT,left,tryRead)
 
 import Data.Aeson (
+    Value,
     ToJSON,object,(.=),encode,
     FromJSON(parseJSON),withObject,withText,(.:),eitherDecode)
 
@@ -24,10 +25,11 @@ import qualified  Data.Text as Text (takeWhile,reverse)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BL (toStrict,fromStrict)
 
-data NeoError = CreationResponseCodeError ResponseCode ByteString
-              | CreationResponseTypeError (Maybe ContentType) ByteString
+data NeoError = CreationResponseCodeError ResponseCode Body
+              | CreationResponseTypeError (Maybe ContentType) Body
               | CreationResponseParseError String
               | CreationReadURIError Text
+              | EmptyResponseCodeError ResponseCode Body
 
 deriving instance Show NeoError
 
@@ -72,11 +74,13 @@ extractId uri = do
 
     tryRead (CreationReadURIError lastURIsegment) (unpack lastURIsegment)
 
+jsonRequest :: Method -> Location -> Body -> Request
+jsonRequest method location body = Request method location jsoncontent jsoncontent body
 
 newNode :: (Monad m) => NeoT m Node
 newNode = do
 
-    let newNodeRequest = Request POST "/db/data/node" jsoncontent jsoncontent ""
+    let newNodeRequest = jsonRequest POST "/db/data/node" ""
 
     CreationResponse selfUri <- create newNodeRequest
 
@@ -84,8 +88,11 @@ newNode = do
 
     return (Node nodeId)
 
-nodeURI :: Node -> Text
+nodeURI :: Node -> Location
 nodeURI (Node nodeid) = "/db/data/node/" `append` (pack (show nodeid))
+
+edgeURI :: Edge -> Location
+edgeURI (Edge edgeid) = "/db/data/relationship/" `append` (pack (show edgeid))
 
 newEdge :: (Monad m) => Label -> Node -> Node -> NeoT m Edge
 newEdge label sourcenode targetnode = do
@@ -94,13 +101,42 @@ newEdge label sourcenode targetnode = do
         payload   = object [
             "to"   .= nodeURI targetnode,
             "type" .= label]
-        newEdgeRequest = Request POST sourceuri jsoncontent jsoncontent (strictEncode payload)
+        newEdgeRequest = jsonRequest POST sourceuri (strictEncode payload)
 
     CreationResponse selfUri <- create newEdgeRequest
 
     edgeId <- extractId selfUri
 
     return (Edge edgeId)
+
+setProperty :: (Monad m) => Text -> Value -> Location -> NeoT m ()
+setProperty key value uri = do
+
+    let requestUri = uri `append` "/properties/" `append` key
+        setPropertyRequest = jsonRequest PUT requestUri (strictEncode value)
+
+    requestWithEmptyResponse setPropertyRequest
+
+requestWithEmptyResponse :: (Monad m) => Request -> NeoT m ()
+requestWithEmptyResponse request = do
+
+    response <- lift (rest request)
+
+    assert (code response == (2,0,4))
+        (EmptyResponseCodeError (code response) (responseBody response))
+
+setNodeProperty :: (Monad m) => Text -> Value -> Node -> NeoT m ()
+setNodeProperty key value node = setProperty key value (nodeURI node) 
+
+setEdgeProperty :: (Monad m) => Text -> Value -> Edge -> NeoT m ()
+setEdgeProperty key value edge = setProperty key value (edgeURI edge)
+
+addNodeLabel :: (Monad m) => Label -> Node -> NeoT m ()
+addNodeLabel label node = do
+
+    let addNodeLabelRequest = jsonRequest POST (nodeURI node `append` "/labels") (strictEncode label)
+
+    requestWithEmptyResponse addNodeLabelRequest
 
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
