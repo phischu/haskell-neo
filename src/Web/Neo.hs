@@ -24,10 +24,10 @@ import qualified  Data.Text as Text (takeWhile,reverse)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BL (toStrict,fromStrict)
 
-data NeoError = NewNodeResponseCodeError ResponseCode ByteString
-              | NewNodeResponseTypeError (Maybe ContentType) ByteString
-              | NewNodeResponseParseError String
-              | NewNodeReadURIError Text
+data NeoError = CreationResponseCodeError ResponseCode ByteString
+              | CreationResponseTypeError (Maybe ContentType) ByteString
+              | CreationResponseParseError String
+              | CreationReadURIError Text
 
 deriving instance Show NeoError
 
@@ -43,43 +43,64 @@ data Node = Node Integer
 
 deriving instance Show Node
 
-data NewNodeResponse = NewNodeResponse Text
+data Edge = Edge Integer
 
-instance FromJSON NewNodeResponse where
-    parseJSON = withObject "NewNodeResponse" (\newNodeResponseObject -> do
-        newNodeResponseObject .: "self" >>= withText "SelfURI" (\selfUriText -> do
-            return (NewNodeResponse selfUriText)))
+deriving instance Show Edge
+
+data CreationResponse = CreationResponse Text
+
+instance FromJSON CreationResponse where
+    parseJSON = withObject "CreationResponse" (\creationResponseObject -> do
+        creationResponseObject .: "self" >>= withText "SelfURI" (\selfUriText -> do
+            return (CreationResponse selfUriText)))
 
 type Label = Text
+
+create :: (Monad m) => Request -> NeoT m CreationResponse
+create request = do
+    response <- lift (rest request)
+    assert (code response == (2,0,1))
+        (CreationResponseCodeError (code response) (responseBody response))
+    assert (responseType response == Just jsoncontent)
+        (CreationResponseTypeError (responseType response) (responseBody response))
+    either (left . CreationResponseParseError) return (strictEitherDecode (responseBody response))
+
+extractId :: (Monad m) => Text -> EitherT NeoError m Integer
+extractId uri = do
+
+    let lastURIsegment = Text.reverse (Text.takeWhile (/= '/') (Text.reverse uri))
+
+    tryRead (CreationReadURIError lastURIsegment) (unpack lastURIsegment)
+
 
 newNode :: (Monad m) => NeoT m Node
 newNode = do
 
-    response <- lift (rest (Request POST "/db/data/node" jsoncontent jsoncontent ""))
-    assert (code response == (2,0,1))
-        (NewNodeResponseCodeError (code response) (responseBody response))
-    assert (responseType response == Just jsoncontent)
-        (NewNodeResponseTypeError (responseType response) (responseBody response))
+    let newNodeRequest = Request POST "/db/data/node" jsoncontent jsoncontent ""
 
-    NewNodeResponse selfUri <- either (left . NewNodeResponseParseError) return (strictEitherDecode (responseBody response))
+    CreationResponse selfUri <- create newNodeRequest
 
-    let lastURIsegment = Text.reverse (Text.takeWhile (/= '/') (Text.reverse selfUri))
-
-    nodeId <- tryRead (NewNodeReadURIError lastURIsegment) (unpack lastURIsegment)
+    nodeId <- extractId selfUri
 
     return (Node nodeId)
 
 nodeURI :: Node -> Text
 nodeURI (Node nodeid) = "/db/data/node/" `append` (pack (show nodeid))
 
-newEdge :: (Monad m) => Label -> Node -> Node -> NeoT m String
+newEdge :: (Monad m) => Label -> Node -> Node -> NeoT m Edge
 newEdge label sourcenode targetnode = do
-	let sourceuri = (nodeURI sourcenode `append` "/relationships")
-	    payload   = object [
-	        "to"   .= nodeURI targetnode,
-	        "type" .= label]
-	response <- lift (rest (Request POST sourceuri jsoncontent jsoncontent (strictEncode payload)))
-	return (show response)
+
+    let sourceuri = (nodeURI sourcenode `append` "/relationships")
+        payload   = object [
+            "to"   .= nodeURI targetnode,
+            "type" .= label]
+        newEdgeRequest = Request POST sourceuri jsoncontent jsoncontent (strictEncode payload)
+
+    CreationResponse selfUri <- create newEdgeRequest
+
+    edgeId <- extractId selfUri
+
+    return (Edge edgeId)
 
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
