@@ -9,20 +9,25 @@ import Web.Rest (
     Response(code,responseType,responseBody),
     ResponseCode)
 
-import Control.Error (EitherT,runEitherT,left)
+import Control.Error (EitherT,runEitherT,left,tryRead)
 
-import Data.Aeson (ToJSON,object,(.=),encode)
+import Data.Aeson (
+    ToJSON,object,(.=),encode,
+    FromJSON(parseJSON),withObject,withText,(.:),eitherDecode)
 
+import Control.Monad (mzero)
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (MonadIO)
 
-import Data.Text (Text,append,pack)
+import Data.Text (Text,append,pack,unpack)
+import qualified  Data.Text as Text (takeWhile,reverse)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B (concat)
-import qualified Data.ByteString.Lazy as BL (toChunks)
+import qualified Data.ByteString.Lazy as BL (toStrict,fromStrict)
 
 data NeoError = NewNodeResponseCodeError ResponseCode ByteString
               | NewNodeResponseTypeError (Maybe ContentType) ByteString
+              | NewNodeResponseParseError String
+              | NewNodeReadURIError Text
 
 deriving instance Show NeoError
 
@@ -35,18 +40,34 @@ defaultRunNeoT :: (MonadIO m) => NeoT m a -> m (Either RestError (Either NeoErro
 defaultRunNeoT = runNeoT "localhost" 7474
 
 data Node = Node Integer
+
 deriving instance Show Node
+
+data NewNodeResponse = NewNodeResponse Text
+
+instance FromJSON NewNodeResponse where
+    parseJSON = withObject "NewNodeResponse" (\newNodeResponseObject -> do
+        newNodeResponseObject .: "self" >>= withText "SelfURI" (\selfUriText -> do
+            return (NewNodeResponse selfUriText)))
 
 type Label = Text
 
-newNode :: (Monad m) => NeoT m String
+newNode :: (Monad m) => NeoT m Node
 newNode = do
+
     response <- lift (rest (Request POST "/db/data/node" jsoncontent jsoncontent ""))
     assert (code response == (2,0,1))
         (NewNodeResponseCodeError (code response) (responseBody response))
     assert (responseType response == Just jsoncontent)
         (NewNodeResponseTypeError (responseType response) (responseBody response))
-    return (show response)
+
+    NewNodeResponse selfUri <- either (left . NewNodeResponseParseError) return (strictEitherDecode (responseBody response))
+
+    let lastURIsegment = Text.reverse (Text.takeWhile (/= '/') (Text.reverse selfUri))
+
+    nodeId <- tryRead (NewNodeReadURIError lastURIsegment) (unpack lastURIsegment)
+
+    return (Node nodeId)
 
 nodeURI :: Node -> Text
 nodeURI (Node nodeid) = "/db/data/node/" `append` (pack (show nodeid))
@@ -68,4 +89,7 @@ jsoncontent :: Text
 jsoncontent = "application/json"
 
 strictEncode :: (ToJSON a) => a -> ByteString
-strictEncode = B.concat . BL.toChunks . encode
+strictEncode = BL.toStrict . encode
+
+strictEitherDecode :: (FromJSON a) => ByteString -> Either String a
+strictEitherDecode = eitherDecode . BL.fromStrict
