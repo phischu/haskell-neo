@@ -5,16 +5,19 @@ module Web.Neo (
 import Web.Rest (
     RestT,rest,
     runRestT,Hostname,Port,RestError,
-    Request(Request),Method(POST,PUT),Location,ContentType,Body,
+    Request(Request),Method(POST,PUT,GET),Location,ContentType,Body,
     Response(code,responseType,responseBody),
     ResponseCode)
 
 import Control.Error (EitherT,runEitherT,left,tryRead)
 
 import Data.Aeson (
-    Value,
+    Value,Object,
     ToJSON,object,(.=),encode,
-    FromJSON(parseJSON),withObject,withText,(.:),eitherDecode)
+    FromJSON(parseJSON),
+    withObject,withText,withArray,
+    (.:),eitherDecode)
+import Data.Aeson.Types (Parser)
 
 import Control.Monad (mzero)
 import Control.Monad.Trans (lift)
@@ -24,12 +27,16 @@ import Data.Text (Text,append,pack,unpack)
 import qualified  Data.Text as Text (takeWhile,reverse)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BL (toStrict,fromStrict)
+import qualified Data.Vector as Vector (toList)
 
 data NeoError = CreationResponseCodeError ResponseCode Body
               | CreationResponseTypeError (Maybe ContentType) Body
               | CreationResponseParseError String
-              | CreationReadURIError Text
+              | ExtractIdError Text
               | EmptyResponseCodeError ResponseCode Body
+              | EdgesResponseCodeError ResponseCode Body
+              | EdgesResponseTypeError (Maybe ContentType) Body
+              | EdgesResponseParseError String
 
 deriving instance Show NeoError
 
@@ -60,11 +67,14 @@ type Label = Text
 
 create :: (Monad m) => Request -> NeoT m CreationResponse
 create request = do
+
     response <- lift (rest request)
+
     assert (code response == (2,0,1))
         (CreationResponseCodeError (code response) (responseBody response))
     assert (responseType response == Just jsoncontent)
         (CreationResponseTypeError (responseType response) (responseBody response))
+
     either (left . CreationResponseParseError) return (strictEitherDecode (responseBody response))
 
 extractId :: (Monad m) => Text -> EitherT NeoError m Integer
@@ -72,7 +82,10 @@ extractId uri = do
 
     let lastURIsegment = Text.reverse (Text.takeWhile (/= '/') (Text.reverse uri))
 
-    tryRead (CreationReadURIError lastURIsegment) (unpack lastURIsegment)
+    tryRead (ExtractIdError lastURIsegment) (unpack lastURIsegment)
+
+extractSelfURI :: Value -> Parser Text
+extractSelfURI = withObject "ResponseObject" (withText "SelfURI" return)
 
 jsonRequest :: Method -> Location -> Body -> Request
 jsonRequest method location body = Request method location jsoncontent jsoncontent body
@@ -137,6 +150,31 @@ addNodeLabel label node = do
     let addNodeLabelRequest = jsonRequest POST (nodeURI node `append` "/labels") (strictEncode label)
 
     requestWithEmptyResponse addNodeLabelRequest
+
+data EdgesResponse = EdgesResponse [Text]
+
+instance FromJSON EdgesResponse where
+    parseJSON = withArray "EdgesResponse" (\edges -> do
+        edgeuris <- mapM extractSelfURI (Vector.toList edges)
+        return (EdgesResponse edgeuris))
+
+edges :: (Monad m) => Node -> NeoT m [Edge]
+edges node = do
+
+    let edgesRequest = jsonRequest GET (nodeURI node `append` "/relationships/all") ""
+
+    response <- lift (rest edgesRequest)
+
+    assert (code response == (2,0,0))
+        (EdgesResponseCodeError (code response) (responseBody response))
+    assert (responseType response == Just jsoncontent)
+        (EdgesResponseTypeError (responseType response) (responseBody response))
+
+    EdgesResponse edgeuris <- either (left . EdgesResponseParseError) return (strictEitherDecode (responseBody response))
+
+    edgeids <- mapM extractId edgeuris
+
+    return (map Edge edgeids)
 
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
