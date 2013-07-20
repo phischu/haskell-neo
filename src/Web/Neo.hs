@@ -36,6 +36,7 @@ data NeoError = ResponseCodeError ResponseCode Body
               | ExtractIdError Text
               | EdgesResponseParseError String
               | EdgeInfoResponseParseError String
+              | NodeLabelsResponseParseError String
 
 deriving instance Show NeoError
 
@@ -215,6 +216,17 @@ edgeLabel = edgeInfo >=> return . edgeInfoType
 
 edgeProperties :: (Monad m) => Edge -> NeoT m Properties
 edgeProperties = edgeInfo >=> return . edgeInfoData
+
+nodeLabels :: (Monad m) => Node -> NeoT m [Label]
+nodeLabels node = do
+
+    response <- lift (rest (jsonGetRequest (nodeURI node `append` "/labels")))
+
+    assertResponseCode (2,0,0) response
+    assertResponseType jsoncontent response
+
+    strictEitherDecode (responseBody response)
+        `whenLeft` NodeLabelsResponseParseError
 
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
