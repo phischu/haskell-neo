@@ -30,15 +30,11 @@ import qualified Data.ByteString.Lazy as BL (toStrict,fromStrict)
 import qualified Data.Vector as Vector (toList)
 import Data.HashMap.Strict (HashMap)
 
-data NeoError = CreationResponseCodeError ResponseCode Body
-              | CreationResponseTypeError (Maybe ContentType) Body
+data NeoError = ResponseCodeError ResponseCode Body
+              | ResponseTypeError (Maybe ContentType) Body
               | CreationResponseParseError String
               | ExtractIdError Text
-              | EmptyResponseCodeError ResponseCode Body
-              | EdgesResponseCodeError ResponseCode Body
-              | EdgesResponseTypeError (Maybe ContentType) Body
               | EdgesResponseParseError String
-              | EdgeInfoResponseCodeError ResponseCode Body
               | EdgeInfoResponseParseError String
 
 deriving instance Show NeoError
@@ -73,10 +69,8 @@ create request = do
 
     response <- lift (rest request)
 
-    assert (code response == (2,0,1))
-        (CreationResponseCodeError (code response) (responseBody response))
-    assert (responseType response == Just jsoncontent)
-        (CreationResponseTypeError (responseType response) (responseBody response))
+    assertResponseCode (2,0,1) response
+    assertResponseType jsoncontent response
 
     either (left . CreationResponseParseError) return (strictEitherDecode (responseBody response))
 
@@ -144,8 +138,7 @@ requestWithEmptyResponse request = do
 
     response <- lift (rest request)
 
-    assert (code response == (2,0,4))
-        (EmptyResponseCodeError (code response) (responseBody response))
+    assertResponseCode (2,0,4) response
 
 setNodeProperty :: (Monad m) => Text -> Value -> Node -> NeoT m ()
 setNodeProperty key value node = setProperty key value (nodeURI node) 
@@ -174,10 +167,8 @@ edges node = do
 
     response <- lift (rest allEdgesRequest)
 
-    assert (code response == (2,0,0))
-        (EdgesResponseCodeError (code response) (responseBody response))
-    assert (responseType response == Just jsoncontent)
-        (EdgesResponseTypeError (responseType response) (responseBody response))
+    assertResponseCode (2,0,0) response
+    assertResponseType jsoncontent response
 
     EdgesResponse edgeuris <- (strictEitherDecode (responseBody response))
         `whenLeft` EdgesResponseParseError
@@ -207,8 +198,8 @@ edgeInfo edge = do
 
     response <- lift (rest (jsonGetRequest (edgeURI edge)))
 
-    assert (code response == (2,0,0))
-        (EdgeInfoResponseCodeError (code response) (responseBody response))
+    assertResponseCode (2,0,0) response
+    assertResponseType jsoncontent response
 
     (strictEitherDecode (responseBody response))
         `whenLeft` EdgeInfoResponseParseError
@@ -228,6 +219,16 @@ edgeProperties = edgeInfo >=> return . edgeInfoData
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
 assert False neoerror = left neoerror
+
+assertResponseCode :: (Monad m) => ResponseCode -> Response -> NeoT m ()
+assertResponseCode expectedCode response = assert
+    (code response == expectedCode)
+    (ResponseCodeError (code response) (responseBody response))
+
+assertResponseType :: (Monad m) => ContentType -> Response -> NeoT m ()
+assertResponseType expectedType response = assert
+    (responseType response == Just expectedType)
+    (ResponseTypeError (responseType response) (responseBody response))
 
 jsoncontent :: Text
 jsoncontent = "application/json"
