@@ -37,6 +37,8 @@ data NeoError = CreationResponseCodeError ResponseCode Body
               | EdgesResponseCodeError ResponseCode Body
               | EdgesResponseTypeError (Maybe ContentType) Body
               | EdgesResponseParseError String
+              | EdgeInfoResponseCodeError ResponseCode Body
+              | EdgeInfoResponseParseError String
 
 deriving instance Show NeoError
 
@@ -82,11 +84,17 @@ extractId uri = do
 
     tryRead (ExtractIdError lastURIsegment) (unpack lastURIsegment)
 
+extractTextField :: Text -> Value -> Parser Text
+extractTextField key = withObject "ResponseObject" (\o -> o .: key >>= withText "TextField" return)
+
 extractSelfURI :: Value -> Parser Text
-extractSelfURI = withObject "ResponseObject" (\o -> o .: "self" >>= withText "SelfURI" return)
+extractSelfURI = extractTextField "self"
 
 jsonRequest :: Method -> Location -> Body -> Request
 jsonRequest method location body = Request method location jsoncontent jsoncontent body
+
+jsonGetRequest :: Location -> Request
+jsonGetRequest location = jsonRequest GET location ""
 
 newNode :: (Monad m) => NeoT m Node
 newNode = do
@@ -159,20 +167,55 @@ instance FromJSON EdgesResponse where
 edges :: (Monad m) => Node -> NeoT m [Edge]
 edges node = do
 
-    let edgesRequest = jsonRequest GET (nodeURI node `append` "/relationships/all") ""
+    let allEdgesRequest = jsonGetRequest (nodeURI node `append` "/relationships/all")
 
-    response <- lift (rest edgesRequest)
+    response <- lift (rest allEdgesRequest)
 
     assert (code response == (2,0,0))
         (EdgesResponseCodeError (code response) (responseBody response))
     assert (responseType response == Just jsoncontent)
         (EdgesResponseTypeError (responseType response) (responseBody response))
 
-    EdgesResponse edgeuris <- either (left . EdgesResponseParseError) return (strictEitherDecode (responseBody response))
+    EdgesResponse edgeuris <- (strictEitherDecode (responseBody response))
+        `whenLeft` EdgesResponseParseError
 
     edgeids <- mapM extractId edgeuris
 
     return (map Edge edgeids)
+
+whenLeft :: (Monad m) => Either a b -> (a -> e) -> EitherT e m b
+whenLeft e f = either (left . f) return e
+
+data EdgeInfo = EdgeInfo {edgeInfoStartUri :: Text,
+                          edgeInfoEndUri   :: Text,
+                          edgeInfoType     :: Text}
+
+instance FromJSON EdgeInfo where
+    parseJSON v = do
+        edgeinfostart <- extractTextField "start" v
+        edgeinfoend   <- extractTextField "end" v
+        edgeinfotype  <- extractTextField "type" v
+        return (EdgeInfo edgeinfostart edgeinfoend edgeinfotype)
+
+edgeInfo :: (Monad m) => Edge -> NeoT m EdgeInfo
+edgeInfo edge = do
+
+    response <- lift (rest (jsonGetRequest (edgeURI edge)))
+
+    assert (code response == (2,0,0))
+        (EdgeInfoResponseCodeError (code response) (responseBody response))
+
+    (strictEitherDecode (responseBody response))
+        `whenLeft` EdgeInfoResponseParseError
+
+source :: (Monad m) => Edge -> NeoT m Node
+source = edgeInfo >=> extractId . edgeInfoStartUri >=> return . Node
+
+target :: (Monad m) => Edge -> NeoT m Node
+target = edgeInfo >=> extractId . edgeInfoEndUri >=> return . Node
+
+edgeLabel :: (Monad m) => Edge -> NeoT m Label
+edgeLabel = edgeInfo >=> return . edgeInfoType
 
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
