@@ -19,7 +19,7 @@ import Data.Aeson (
     (.:),eitherDecode)
 import Data.Aeson.Types (Parser)
 
-import Control.Monad (mzero)
+import Control.Monad (mzero,(>=>))
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (MonadIO)
 
@@ -59,9 +59,7 @@ deriving instance Show Edge
 data CreationResponse = CreationResponse Text
 
 instance FromJSON CreationResponse where
-    parseJSON = withObject "CreationResponse" (\creationResponseObject -> do
-        creationResponseObject .: "self" >>= withText "SelfURI" (\selfUriText -> do
-            return (CreationResponse selfUriText)))
+    parseJSON = extractSelfURI >=> return . CreationResponse
 
 type Label = Text
 
@@ -85,7 +83,7 @@ extractId uri = do
     tryRead (ExtractIdError lastURIsegment) (unpack lastURIsegment)
 
 extractSelfURI :: Value -> Parser Text
-extractSelfURI = withObject "ResponseObject" (withText "SelfURI" return)
+extractSelfURI = withObject "ResponseObject" (\o -> o .: "self" >>= withText "SelfURI" return)
 
 jsonRequest :: Method -> Location -> Body -> Request
 jsonRequest method location body = Request method location jsoncontent jsoncontent body
