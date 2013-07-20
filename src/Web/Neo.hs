@@ -28,6 +28,7 @@ import qualified  Data.Text as Text (takeWhile,reverse)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BL (toStrict,fromStrict)
 import qualified Data.Vector as Vector (toList)
+import Data.HashMap.Strict (HashMap)
 
 data NeoError = CreationResponseCodeError ResponseCode Body
               | CreationResponseTypeError (Maybe ContentType) Body
@@ -57,6 +58,8 @@ deriving instance Show Node
 data Edge = Edge Integer
 
 deriving instance Show Edge
+
+type Properties = HashMap Text Value
 
 data CreationResponse = CreationResponse Text
 
@@ -188,14 +191,16 @@ whenLeft e f = either (left . f) return e
 
 data EdgeInfo = EdgeInfo {edgeInfoStartUri :: Text,
                           edgeInfoEndUri   :: Text,
-                          edgeInfoType     :: Text}
+                          edgeInfoType     :: Text,
+                          edgeInfoData     :: Properties}
 
 instance FromJSON EdgeInfo where
     parseJSON v = do
         edgeinfostart <- extractTextField "start" v
         edgeinfoend   <- extractTextField "end" v
         edgeinfotype  <- extractTextField "type" v
-        return (EdgeInfo edgeinfostart edgeinfoend edgeinfotype)
+        edgeinfodata  <- withObject "EdgeInfoObject" (\o -> o .: "data") v
+        return (EdgeInfo edgeinfostart edgeinfoend edgeinfotype edgeinfodata)
 
 edgeInfo :: (Monad m) => Edge -> NeoT m EdgeInfo
 edgeInfo edge = do
@@ -216,6 +221,9 @@ target = edgeInfo >=> extractId . edgeInfoEndUri >=> return . Node
 
 edgeLabel :: (Monad m) => Edge -> NeoT m Label
 edgeLabel = edgeInfo >=> return . edgeInfoType
+
+edgeProperties :: (Monad m) => Edge -> NeoT m Properties
+edgeProperties = edgeInfo >=> return . edgeInfoData
 
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
