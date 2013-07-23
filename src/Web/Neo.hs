@@ -101,11 +101,20 @@ addNodeLabel :: (Monad m) => Label -> Node -> NeoT m ()
 addNodeLabel label node = emptyCall addNodeLabelRequest where
     addNodeLabelRequest = jsonRequest POST (nodeURI node `append` "/labels") (strictEncode label)
 
+nodeById :: (Monad m) => Integer -> NeoT m Node
+nodeById nodeid = call (jsonGetRequest ("/db/data/node/" `append` (pack (show nodeid)))) (2,0,0)
+
+nodesByLabel :: (Monad m) => Label -> NeoT m [Node]
+nodesByLabel label = call (jsonGetRequest ("/db/data/label/" `append` label `append` "/nodes")) (2,0,0)
+
 edges :: (Monad m) => Node -> NeoT m [Edge]
 edges node = call (jsonGetRequest (nodeURI node `append` "/relationships/all")) (2,0,0)
 
-nodeById :: (Monad m) => Integer -> NeoT m Node
-nodeById nodeid = call (jsonGetRequest ("/db/data/node/" `append` (pack (show nodeid)))) (2,0,0)
+nodeLabels :: (Monad m) => Node -> NeoT m [Label]
+nodeLabels node = call (jsonGetRequest (nodeURI node `append` "/labels")) (2,0,0)
+
+nodeProperties :: (Monad m) => Node -> NeoT m Properties
+nodeProperties = return . nodeData
 
 source :: (Monad m) => Edge -> NeoT m Node
 source = nodeById . edgeStart
@@ -118,12 +127,6 @@ edgeLabel = return . edgeType
 
 edgeProperties :: (Monad m) => Edge -> NeoT m Properties
 edgeProperties = return . edgeData
-
-nodeLabels :: (Monad m) => Node -> NeoT m [Label]
-nodeLabels node = call (jsonGetRequest (nodeURI node `append` "/labels")) (2,0,0)
-
-nodeProperties :: (Monad m) => Node -> NeoT m Properties
-nodeProperties = return . nodeData
 
 assert :: (Monad m) => Bool -> NeoError -> NeoT m ()
 assert True  _        = return ()
