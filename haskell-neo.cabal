@@ -1,5 +1,5 @@
 name:                haskell-neo
-version:             0.1.0.0
+version:             0.1.0.1
 synopsis:            Talk to neo4j from haskell via rest.
 license:             BSD3
 license-file:        LICENSE
@@ -10,7 +10,8 @@ build-type:          Simple
 cabal-version:       >=1.10
 
 library
-  exposed-modules:     Web.Neo
+  exposed-modules:     Web.Neo,
+                       Web.Neo.Internal
   -- other-modules:       
   hs-source-dirs:      src
   build-depends:       base,
