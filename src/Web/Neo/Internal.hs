@@ -37,7 +37,7 @@ defaultRunNeoT :: (MonadIO m) => NeoT m a -> m (Either RestError (Either NeoErro
 defaultRunNeoT = runNeoT "localhost" 7474
 
 -- | The neo monad transformer. Catches errors and uses REST calls.
-type NeoT m a = EitherT NeoError (RestT m) a
+type NeoT m = EitherT NeoError (RestT m)
 
 -- | Type of things that can go wrong when talking to neo4j via the REST API.
 data NeoError = ResponseCodeError ResponseCode Body
