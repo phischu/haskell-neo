@@ -22,7 +22,7 @@ import Control.Monad (when)
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (MonadIO)
 
-import Data.Text (Text,append,pack,unpack)
+import Data.Text (Text,append,pack,unpack,isPrefixOf)
 import qualified  Data.Text as Text (takeWhile,reverse)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BL (toStrict,fromStrict)
@@ -167,9 +167,10 @@ assertResponseCode expectedCode response = when
 --   given expected 'ContentType' or is not present at all throw a
 --   'ResponseTypeError'.
 assertResponseType :: (Monad m) => ContentType -> Response -> NeoT m ()
-assertResponseType expectedType response = when
-    (Just expectedType /= responseType response)
-    (left (ResponseTypeError (responseType response) (responseBody response)))
+assertResponseType expectedType response = case responseType response of
+    Nothing -> return ()
+    Just givenType -> when (not (expectedType `isPrefixOf` givenType))
+        (left (ResponseTypeError (responseType response) (responseBody response)))
 
 -- | The content type of a json request or a json response.
 jsoncontent :: ContentType
