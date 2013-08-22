@@ -10,6 +10,8 @@ module Web.Neo (
     newEdge,setEdgeProperty,
     -- * Get Nodes
     nodeById,nodesByLabel,
+    -- * Get Edges
+    edgeById,
     -- * Get Information about Nodes
     allEdges,incomingEdges,outgoingEdges,
     nodeLabels,nodeProperties,
@@ -23,6 +25,7 @@ import Web.Neo.Internal (
     newNode,setNodeProperty,addNodeLabel,
     newEdge,setEdgeProperty,
     nodeById,nodesByLabel,
+    edgeById,
     allEdges,incomingEdges,outgoingEdges,
     nodeLabels,nodeProperties,
     source,target,edgeLabel,edgeProperties

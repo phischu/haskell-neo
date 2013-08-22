@@ -18,7 +18,7 @@ import Data.Aeson (
     (.:),eitherDecode)
 import Data.Aeson.Types (Parser)
 
-import Control.Monad (when)
+import Control.Monad (when,(>=>))
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (MonadIO)
 
@@ -120,6 +120,10 @@ nodeById nodeid = call (jsonGetRequest ("/db/data/node/" `append` (pack (show no
 nodesByLabel :: (Monad m) => Label -> NeoT m [Node]
 nodesByLabel label = call (jsonGetRequest ("/db/data/label/" `append` label `append` "/nodes")) (2,0,0)
 
+-- | Get the edge with the given neo4j internal ID.
+edgeById :: (Monad m) => Integer -> NeoT m Edge
+edgeById edgeid = call (jsonGetRequest ("/db/data/relationship/" `append` (pack (show edgeid)))) (2,0,0)
+
 -- | Get all edges (outgoing as well as incoming) of the given node.
 allEdges :: (Monad m) => Node -> NeoT m [Edge]
 allEdges node = call (jsonGetRequest (nodeURI node `append` "/relationships/all")) (2,0,0)
@@ -138,7 +142,7 @@ nodeLabels node = call (jsonGetRequest (nodeURI node `append` "/labels")) (2,0,0
 
 -- | Get the properties of the given node.
 nodeProperties :: (Monad m) => Node -> NeoT m Properties
-nodeProperties = return . nodeData
+nodeProperties = nodeById . nodeId >=> return . nodeData
 
 -- | Get the source node of the given edge.
 source :: (Monad m) => Edge -> NeoT m Node
@@ -150,11 +154,11 @@ target = nodeById . edgeEnd
 
 -- | Get the label of the given edge.
 edgeLabel :: (Monad m) => Edge -> NeoT m Label
-edgeLabel = return . edgeType
+edgeLabel = edgeById . edgeId >=> return . edgeType
 
 -- | Get the properties of the given edge.
 edgeProperties :: (Monad m) => Edge -> NeoT m Properties
-edgeProperties = return . edgeData
+edgeProperties = edgeById . edgeId >=> return . edgeData
 
 -- | When the given expected 'ResponseCode' and the one of the given 'Response'
 --   are not equal throw a 'ResponseCodeError'.

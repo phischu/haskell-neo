@@ -1,5 +1,5 @@
 name:                haskell-neo
-version:             0.2.4.1
+version:             0.2.5.0
 synopsis:            Talk to neo4j from haskell via rest.
 license:             BSD3
 license-file:        LICENSE
