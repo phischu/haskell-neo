@@ -4,7 +4,7 @@ module Web.Neo (
     runNeoT,defaultRunNeoT,NeoT,NeoError(..),
     Hostname,Port,
     -- * Basic Types
-    Node,Edge,Properties,Label,
+    Node(..),Edge(..),Properties,Label,
     -- * Create Nodes and Edges
     newNode,setNodeProperty,addNodeLabel,
     newEdge,setEdgeProperty,
@@ -19,16 +19,6 @@ module Web.Neo (
     source,target,edgeLabel,edgeProperties
     ) where
 
-import Web.Neo.Internal (
-    NeoT,runNeoT,defaultRunNeoT,NeoError(..),
-    Node,Edge,Properties,Label,
-    newNode,setNodeProperty,addNodeLabel,
-    newEdge,setEdgeProperty,
-    nodeById,nodesByLabel,
-    edgeById,
-    allEdges,incomingEdges,outgoingEdges,
-    nodeLabels,nodeProperties,
-    source,target,edgeLabel,edgeProperties
-    )
+import Web.Neo.Internal
 
 import Web.Rest (Hostname,Port)

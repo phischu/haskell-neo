@@ -21,6 +21,7 @@ import Data.Aeson.Types (Parser)
 import Control.Monad (when,(>=>))
 import Control.Monad.Trans (lift)
 import Control.Monad.IO.Class (MonadIO)
+import Data.Function (on)
 
 import Data.Text (Text,append,pack,unpack,isPrefixOf)
 import qualified  Data.Text as Text (takeWhile,reverse)
@@ -54,6 +55,12 @@ data Node = Node {
 
 deriving instance Show Node
 
+instance Eq Node where
+    (==) = (==) `on` nodeId
+
+instance Ord Node where
+    (<=) = (<=) `on` nodeId
+
 instance FromJSON Node where
     parseJSON = withObject "NodeObject" (\o -> do
         selfid   <- o .: "self" >>= parseSelfId
@@ -69,6 +76,12 @@ data Edge = Edge {
     edgeData :: Properties}
 
 deriving instance Show Edge
+
+instance Eq Edge where
+    (==) = (==) `on` edgeId
+
+instance Ord Edge where
+    (<=) = (<=) `on` edgeId
 
 instance FromJSON Edge where
     parseJSON = withObject "EdgeObject" (\o -> do
