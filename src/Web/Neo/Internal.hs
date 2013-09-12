@@ -104,7 +104,7 @@ newNode :: (Monad m) => NeoT m Node
 newNode = call (jsonRequest POST "/db/data/node" "") (2,0,1)
 
 -- | Set the property of the given node with the given key to the given value.
-setNodeProperty :: (Monad m) => Text -> Value -> Node -> NeoT m ()
+setNodeProperty :: (Monad m,ToJSON value) => Text -> value -> Node -> NeoT m ()
 setNodeProperty key value node = setProperty key value (nodeURI node)
 
 -- | Add a label to a node.
@@ -122,7 +122,7 @@ newEdge label sourcenode targetnode = call newEdgeRequest (2,0,1) where
         "type" .= label]
 
 -- | Set the property of the given edge with the given key to the given value.
-setEdgeProperty :: (Monad m) => Text -> Value -> Edge -> NeoT m ()
+setEdgeProperty :: (Monad m,ToJSON value) => Text -> value -> Edge -> NeoT m ()
 setEdgeProperty key value edge = setProperty key value (edgeURI edge)
 
 -- | Get the node with the given neo4j internal ID.
@@ -236,7 +236,7 @@ edgeURI :: Edge -> Location
 edgeURI edge = "/db/data/relationship/" `append` (pack (show (edgeId edge)))
 
 -- | Set the property of either an edge or a node at the given location.
-setProperty :: (Monad m) => Text -> Value -> Location -> NeoT m ()
+setProperty :: (Monad m,ToJSON value) => Text -> value -> Location -> NeoT m ()
 setProperty key value uri = emptyCall setPropertyRequest where
     requestUri         = uri `append` "/properties/" `append` key
     setPropertyRequest = jsonRequest PUT requestUri (strictEncode value)
