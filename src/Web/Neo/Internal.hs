@@ -88,7 +88,7 @@ instance FromJSON Edge where
         selfid   <- o .: "self"  >>= parseSelfId
         startid  <- o .: "start" >>= parseSelfId
         endid    <- o .: "end"   >>= parseSelfId
-        label    <- o .: "type"  >>= parseJSON
+        label    <- o .: "type"
         edgedata <- o .: "data"
         return (Edge selfid startid endid label edgedata))
 
@@ -182,10 +182,13 @@ type CypherParameters = Value
 -- | Result of a Cypher query. A list of column headers and a list of rows.
 --   Each row is itself a list of json values, exactly one for each column
 --   header. Each value in a row might have a very different shape.
-data CypherResult = CypherResult
+data CypherResult = CypherResult {columnHeaders :: [Text], rowValues :: [[Value]]}
 
 instance FromJSON CypherResult where
-    parseJSON = undefined
+    parseJSON = withObject "CypherResultObject" (\o -> do
+        columnheaders <- o .: "columns"
+        rowvalues <- o .: "data"
+        return (CypherResult columnheaders rowvalues))
 
 -- | Execute the given cypher query text with the given parameters. Returns
 --   the result of the query.
