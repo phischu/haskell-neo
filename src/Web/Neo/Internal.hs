@@ -173,6 +173,29 @@ edgeLabel = edgeById . edgeId >=> return . edgeType
 edgeProperties :: (Monad m) => Edge -> NeoT m Properties
 edgeProperties = edgeById . edgeId >=> return . edgeData
 
+-- | Cypher query text.
+type CypherQuery = Text
+
+-- | Cypher query Parameters. Should be an object.
+type CypherParameters = Value
+
+-- | Result of a Cypher query. A list of column headers and a list of rows.
+--   Each row is itself a list of json values, exactly one for each column
+--   header. Each value in a row might have a very different shape.
+data CypherResult = CypherResult
+
+instance FromJSON CypherResult where
+    parseJSON = undefined
+
+-- | Execute the given cypher query text with the given parameters. Returns
+--   the result of the query.
+cypher :: (Monad m) => CypherQuery -> CypherParameters -> NeoT m CypherResult
+cypher cypherQuery cypherParameters = call cypherRequest (2,0,0) where
+    cypherRequest = jsonRequest POST "/cypher" (strictEncode payload)
+    payload = object [
+        "query" .= cypherQuery,
+        "params" .= cypherParameters]
+
 -- | When the given expected 'ResponseCode' and the one of the given 'Response'
 --   are not equal throw a 'ResponseCodeError'.
 assertResponseCode :: (Monad m) => ResponseCode -> Response -> NeoT m ()
