@@ -194,7 +194,7 @@ instance FromJSON CypherResult where
 --   the result of the query.
 cypher :: (Monad m) => CypherQuery -> CypherParameters -> NeoT m CypherResult
 cypher cypherQuery cypherParameters = call cypherRequest (2,0,0) where
-    cypherRequest = jsonRequest POST "/cypher" (strictEncode payload)
+    cypherRequest = jsonRequest POST "/db/data/cypher" (strictEncode payload)
     payload = object [
         "query" .= cypherQuery,
         "params" .= cypherParameters]
