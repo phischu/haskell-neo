@@ -18,7 +18,7 @@ module Web.Neo (
     -- * Get Information about Edges
     source,target,edgeLabel,edgeProperties,
     -- * Cypher Queries
-    cypher,CypherQuery,CypherParameters,CypherResult
+    cypher,CypherQuery,CypherParameters,CypherResult(..)
     ) where
 
 import Web.Neo.Internal
