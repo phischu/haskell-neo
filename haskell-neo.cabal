@@ -22,6 +22,5 @@ library
                        transformers,
                        text,
                        bytestring,
-                       unordered-containers,
-                       vector
+                       unordered-containers
   default-language:    Haskell2010
