@@ -184,6 +184,8 @@ type CypherParameters = Value
 --   header. Each value in a row might have a very different shape.
 data CypherResult = CypherResult {columnHeaders :: [Text], rowValues :: [[Value]]}
 
+deriving instance Show CypherResult
+
 instance FromJSON CypherResult where
     parseJSON = withObject "CypherResultObject" (\o -> do
         columnheaders <- o .: "columns"
